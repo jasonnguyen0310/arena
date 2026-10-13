@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `market_regime` text;

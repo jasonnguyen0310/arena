@@ -1,0 +1,1 @@
+ALTER TABLE `trades` ADD `criteria_news` integer;

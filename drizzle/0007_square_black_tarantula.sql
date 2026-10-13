@@ -1,0 +1,1 @@
+ALTER TABLE `trade_trims` ADD `why` text;

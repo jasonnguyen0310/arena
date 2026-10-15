@@ -1,19 +1,24 @@
 import { createTrade } from "./actions";
-import { INSTRUMENTS, DIRECTIONS, EMOTIONS_BEFORE, SETUP_TYPES, MARKET_REGIMES, SIZING_TIERS } from "@/lib/enums";
+import { DIRECTIONS, EMOTIONS_BEFORE, SETUP_TYPES, MARKET_REGIMES } from "@/lib/enums";
 import { db, schema } from "@/db";
-import { isNull } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import TargetEditor from "../TargetEditor";
+import InstrumentAndSize from "../InstrumentAndSize";
 
 export const dynamic = "force-dynamic";
 
-const MAX_OPEN_POSITIONS = 5;
+const MAX_OPEN_OPTION_POSITIONS = 5;
+const OPTION_INSTRUMENTS = ["call", "put", "call_spread", "put_spread"] as const satisfies readonly (typeof schema.trades.$inferInsert.instrument)[];
 
 export default async function NewTradePage() {
-  const openTrades = await db.query.trades.findMany({
-    where: isNull(schema.trades.closed_at),
+  const openOptionTrades = await db.query.trades.findMany({
+    where: and(
+      isNull(schema.trades.closed_at),
+      inArray(schema.trades.instrument, [...OPTION_INSTRUMENTS]),
+    ),
   });
-  const openCount = openTrades.length;
-  const overLimit = openCount >= MAX_OPEN_POSITIONS;
+  const openOptionCount = openOptionTrades.length;
+  const overLimit = openOptionCount >= MAX_OPEN_OPTION_POSITIONS;
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -38,18 +43,18 @@ export default async function NewTradePage() {
             className="text-[0.62rem] font-semibold uppercase tracking-[0.28em]"
             style={{ color: "#F87171" }}
           >
-            Rule violation — Max open positions reached
+            Rule violation — Max open option positions reached
           </div>
           <h2
             className="mt-2 text-2xl font-semibold tracking-tight"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            You already have {openCount} open trades. Your limit is {MAX_OPEN_POSITIONS}.
+            You already have {openOptionCount} open option trades. Your limit is {MAX_OPEN_OPTION_POSITIONS}.
           </h2>
           <div className="mt-3 text-sm leading-relaxed text-text">
             You set this rule in a clear-headed moment. The number sitting in
             front of you right now is bigger than that one. Before you open
-            another position, read these out loud:
+            another option position, read these out loud:
           </div>
           <ul className="mt-4 space-y-2 text-sm leading-snug text-text">
             <li className="flex gap-2">
@@ -99,10 +104,10 @@ export default async function NewTradePage() {
             <div
               className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-muted"
             >
-              Already open ({openCount}):
+              Already open ({openOptionCount}):
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {openTrades.map((t) => (
+              {openOptionTrades.map((t) => (
                 <span
                   key={t.id}
                   className="font-mono text-xs rounded px-2 py-1"
@@ -134,19 +139,19 @@ export default async function NewTradePage() {
                 type="checkbox"
                 name="override_max_positions"
                 value="1"
-                required
                 className="mt-1"
               />
               <span>
                 <span className="font-semibold" style={{ color: "#F87171" }}>
-                  I am consciously breaking my {MAX_OPEN_POSITIONS}-position
-                  rule.
+                  If this is an option trade, I am consciously breaking my
+                  {" "}{MAX_OPEN_OPTION_POSITIONS}-option-position rule.
                 </span>
                 <br />
                 <span className="text-xs text-muted">
-                  I&apos;ve read the warning above. I know what I&apos;m risking
-                  — financially and to my discipline. I accept full responsibility
-                  for this trade and whatever it does to my consistency.
+                  Stock trades don&apos;t count toward the limit — leave this
+                  unchecked and submit normally. Only check it to force through
+                  another <em>option</em> position. I&apos;ve read the warning
+                  above and accept full responsibility.
                 </span>
               </span>
             </label>
@@ -158,14 +163,6 @@ export default async function NewTradePage() {
             <input id="ticker" name="ticker" required placeholder="SPY" autoFocus />
           </div>
           <div>
-            <label htmlFor="instrument">Instrument</label>
-            <select id="instrument" name="instrument" required defaultValue="call">
-              {INSTRUMENTS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label htmlFor="direction">Direction</label>
             <select id="direction" name="direction" required defaultValue="long">
               {DIRECTIONS.map((o) => (
@@ -173,25 +170,7 @@ export default async function NewTradePage() {
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="planned_size">Planned size ($)</label>
-            <select id="planned_size" name="planned_size" required defaultValue="">
-              <option value="" disabled>Pick a tier…</option>
-              {SIZING_TIERS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label} — {s.tier}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="strike">Strike (options)</label>
-            <input id="strike" name="strike" type="number" step="any" placeholder="e.g. 250" />
-          </div>
-          <div>
-            <label htmlFor="expiration">Expiration (options)</label>
-            <input id="expiration" name="expiration" type="date" />
-          </div>
+          <InstrumentAndSize />
           <div>
             <label htmlFor="planned_entry">Entry (price level)</label>
             <input id="planned_entry" name="planned_entry" type="number" step="any" placeholder="e.g. 648 (stock price)" />

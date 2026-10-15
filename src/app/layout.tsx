@@ -73,9 +73,12 @@ export default async function RootLayout({
               )}
               <Link href="/" className="nav-link">Overview</Link>
               <Link href="/trades" className="nav-link">Journal</Link>
+              <Link href="/plan" className="nav-link">Plan</Link>
+              <Link href="/macro" className="nav-link">Macro</Link>
               <Link href="/edge" className="nav-link">Edge</Link>
               <Link href="/options-lab" className="nav-link">Lab</Link>
-              <Link href="/new" className="btn btn-primary ml-2">New trade</Link>
+              <Link href="/macro/new" className="btn btn-primary ml-2">+ Macro Event</Link>
+              <Link href="/new" className="btn btn-primary ml-1">+ New Trade</Link>
             </div>
           </nav>
         </header>

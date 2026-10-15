@@ -78,10 +78,10 @@ export default async function EdgePage() {
             fontFamily: "var(--font-display)",
           }}
         >
-          I trade <em>breakouts</em> on <em>sector leaders</em> with a{" "}
+          I trade <em>momentum</em> on <em>sector leaders</em> with a{" "}
           <em>clear fundamental story I understand</em>, entering at{" "}
           <em>defined key levels</em> once{" "}
-          <em>momentum is confirmed by price action</em>.
+          <em>price action confirms</em>.
         </blockquote>
       </div>
 
@@ -158,7 +158,7 @@ export default async function EdgePage() {
                 className="text-[0.6rem] font-semibold uppercase tracking-[0.22em]"
                 style={{ color: "#F87171" }}
               >
-                Max loss / trade
+                Max loss / day
               </span>
               <span className="font-mono text-base font-semibold tabular-nums">
                 $5,000

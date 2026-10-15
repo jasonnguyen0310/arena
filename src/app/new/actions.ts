@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { isNull } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 
-const MAX_OPEN_POSITIONS = 5;
+const MAX_OPEN_OPTION_POSITIONS = 5;
+const OPTION_INSTRUMENTS = ["call", "put", "call_spread", "put_spread"] as const satisfies readonly (typeof schema.trades.$inferInsert.instrument)[];
 
 function parseNumber(v: FormDataEntryValue | null): number | null {
   if (v == null || v === "") return null;
@@ -26,17 +27,25 @@ export async function createTrade(formData: FormData) {
     throw new Error("Missing required fields");
   }
 
-  // Hard-stop at MAX_OPEN_POSITIONS. The client form shows the warning and
-  // requires an override checkbox; we re-check here so the limit holds even
-  // if someone bypasses the client UI.
-  const openCount = (
-    await db.query.trades.findMany({ where: isNull(schema.trades.closed_at) })
-  ).length;
-  const override = formData.get("override_max_positions") === "1";
-  if (openCount >= MAX_OPEN_POSITIONS && !override) {
-    throw new Error(
-      `Max ${MAX_OPEN_POSITIONS} open positions. Close one first or acknowledge the override on the form.`,
-    );
+  // Hard-stop at MAX_OPEN_OPTION_POSITIONS. The limit applies only to open
+  // option trades (stock positions don't count). Re-checked here so the rule
+  // holds even if someone bypasses the client UI.
+  const isOption = (OPTION_INSTRUMENTS as readonly string[]).includes(instrument);
+  if (isOption) {
+    const openOptionCount = (
+      await db.query.trades.findMany({
+        where: and(
+          isNull(schema.trades.closed_at),
+          inArray(schema.trades.instrument, [...OPTION_INSTRUMENTS]),
+        ),
+      })
+    ).length;
+    const override = formData.get("override_max_positions") === "1";
+    if (openOptionCount >= MAX_OPEN_OPTION_POSITIONS && !override) {
+      throw new Error(
+        `Max ${MAX_OPEN_OPTION_POSITIONS} open option positions. Close one first or acknowledge the override on the form.`,
+      );
+    }
   }
 
   const setupTypeRaw = String(formData.get("setup_type") ?? "").trim();

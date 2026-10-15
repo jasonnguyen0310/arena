@@ -227,7 +227,30 @@ function Chevron() {
   );
 }
 
-export default async function TradesPage() {
+export const dynamic = "force-dynamic";
+
+type ViewMode = "all" | "options" | "shares";
+
+function parseView(v: string | undefined): ViewMode {
+  return v === "options" || v === "shares" ? v : "all";
+}
+
+const OPTION_INSTRUMENTS = new Set(["call", "put", "call_spread", "put_spread"]);
+function matchesView(t: Trade, view: ViewMode): boolean {
+  if (view === "all") return true;
+  if (view === "options") return OPTION_INSTRUMENTS.has(t.instrument);
+  if (view === "shares") return t.instrument === "stock";
+  return true;
+}
+
+export default async function TradesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view: viewParam } = await searchParams;
+  const view = parseView(viewParam);
+
   const [openRaw, closedRaw, allTrims] = await Promise.all([
     db.query.trades.findMany({
       where: isNull(schema.trades.closed_at),
@@ -249,8 +272,8 @@ export default async function TradesPage() {
     ...t,
     trims_list: (trimsByTrade.get(t.id) ?? []).sort((a, b) => a.ordinal - b.ordinal),
   });
-  const open = openRaw.map(attachTrims);
-  const closed = closedRaw.map(attachTrims);
+  const open = openRaw.filter((t) => matchesView(t, view)).map(attachTrims);
+  const closed = closedRaw.filter((t) => matchesView(t, view)).map(attachTrims);
 
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -274,6 +297,18 @@ export default async function TradesPage() {
     trimSummaryByTrade.set(tr.trade_id, cur);
   }
 
+  const totalOptions = openRaw.filter((t) => OPTION_INSTRUMENTS.has(t.instrument)).length
+    + closedRaw.filter((t) => OPTION_INSTRUMENTS.has(t.instrument)).length;
+  const totalShares = openRaw.filter((t) => t.instrument === "stock").length
+    + closedRaw.filter((t) => t.instrument === "stock").length;
+  const totalAll = openRaw.length + closedRaw.length;
+
+  const TABS: { value: ViewMode; label: string; count: number }[] = [
+    { value: "all", label: "All", count: totalAll },
+    { value: "options", label: "Options", count: totalOptions },
+    { value: "shares", label: "Shares", count: totalShares },
+  ];
+
   return (
     <div className="space-y-10">
       <div>
@@ -281,6 +316,26 @@ export default async function TradesPage() {
         <p className="mt-1 text-sm text-muted">
           Every trade you committed to, in order. Tap a row for details.
         </p>
+        <div className="mt-4 flex items-center gap-1 border-b border-border/60 pb-2 text-sm">
+          {TABS.map((t) => {
+            const active = t.value === view;
+            return (
+              <Link
+                key={t.value}
+                href={t.value === "all" ? "/trades" : `/trades?view=${t.value}`}
+                className="rounded-md px-3 py-1.5 transition-colors"
+                style={{
+                  color: active ? "#93C5FD" : "var(--color-muted)",
+                  background: active ? "rgba(147,197,253,0.08)" : "transparent",
+                  border: active ? "1px solid rgba(147,197,253,0.28)" : "1px solid transparent",
+                }}
+              >
+                {t.label}
+                <span className="ml-2 text-[0.68rem] text-dim">{t.count}</span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       <section>

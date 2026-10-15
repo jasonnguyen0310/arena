@@ -340,7 +340,7 @@ export default async function PlaybookPage() {
               className="mt-1 text-sm italic leading-snug text-text"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Breakouts on sector leaders with a clear fundamental story I understand, entering at defined key levels once momentum is confirmed by price action.
+              Momentum on sector leaders with a clear fundamental story I understand, entering at defined key levels once price action confirms.
             </blockquote>
           </div>
           <Link

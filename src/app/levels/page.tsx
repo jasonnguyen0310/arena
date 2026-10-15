@@ -130,7 +130,43 @@ function labelText(v: string): string {
   return KEY_LEVEL_LABELS.find((l) => l.value === v)?.label ?? v;
 }
 
-export default async function LevelsPage() {
+type NearLevel = {
+  ticker: string;
+  price: number;        // current spot
+  level: number;        // the key level
+  distancePct: number;  // signed: positive if level is above spot
+  source: "traded" | "watching";
+};
+
+const NEAR_PCT = 1.5; // flag levels within ±1.5% of spot
+
+async function fetchQuotes(tickers: string[]): Promise<Map<string, number>> {
+  // Dynamic import keeps yahoo-finance2 out of the client bundle.
+  const yahoo = (await import("yahoo-finance2")).default;
+  const prices = new Map<string, number>();
+  const results = await Promise.allSettled(
+    tickers.map(async (t) => {
+      const q = await yahoo.quote(t);
+      const px =
+        (q as { regularMarketPrice?: number | null }).regularMarketPrice ??
+        (q as { postMarketPrice?: number | null }).postMarketPrice ??
+        (q as { preMarketPrice?: number | null }).preMarketPrice;
+      if (typeof px === "number" && Number.isFinite(px)) prices.set(t, px);
+    }),
+  );
+  // Swallow individual failures — a bad ticker shouldn't kill the whole scan.
+  void results;
+  return prices;
+}
+
+export default async function LevelsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scan?: string }>;
+}) {
+  const { scan } = await searchParams;
+  const shouldScan = scan === "1";
+
   const [withLevels, watched] = await Promise.all([
     db.query.trades.findMany({
       where: and(isNotNull(schema.trades.key_level), isNotNull(schema.trades.closed_at)),
@@ -202,6 +238,38 @@ export default async function LevelsPage() {
     return b.totalPnl - a.totalPnl;
   });
 
+  // Yahoo scan — run when ?scan=1. Compares every known level across every
+  // tracked ticker against its current spot price and surfaces near-triggers.
+  let near: NearLevel[] = [];
+  let scanError: string | null = null;
+  let scannedCount = 0;
+  if (shouldScan && allTickers.size > 0) {
+    try {
+      const prices = await fetchQuotes([...allTickers]);
+      scannedCount = prices.size;
+      for (const c of cards) {
+        const spot = prices.get(c.ticker);
+        if (!spot) continue;
+        for (const r of c.rows) {
+          const level = r.price;
+          const distancePct = ((level - spot) / spot) * 100;
+          if (Math.abs(distancePct) <= NEAR_PCT) {
+            near.push({
+              ticker: c.ticker,
+              price: spot,
+              level,
+              distancePct,
+              source: r.kind,
+            });
+          }
+        }
+      }
+      near.sort((a, b) => Math.abs(a.distancePct) - Math.abs(b.distancePct));
+    } catch (err) {
+      scanError = err instanceof Error ? err.message : "Scan failed.";
+    }
+  }
+
   // Top-of-page "hottest levels" — individual (ticker, price) combos with the
   // highest composite score. Requires min 2 trades. Watched-only levels excluded.
   const flat: (LevelStats & { ticker: string })[] = [];
@@ -234,8 +302,95 @@ export default async function LevelsPage() {
             entries. Ranked by frequency traded, win rate, and average return.
           </p>
         </div>
-        <Link href="/trades" className="btn btn-ghost">Journal →</Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={shouldScan ? "/levels" : "/levels?scan=1"}
+            className="btn btn-primary"
+          >
+            {shouldScan ? "Scanning…" : "Scan prices now"}
+          </Link>
+          <Link href="/trades" className="btn btn-ghost">Journal →</Link>
+        </div>
       </div>
+
+      {/* Scan results — only when ?scan=1 */}
+      {shouldScan && (
+        <section
+          className="rounded-2xl p-5"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(74,222,128,0.08), rgba(74,222,128,0.02))",
+            border: "1px solid rgba(74,222,128,0.28)",
+            boxShadow: "0 0 32px -12px rgba(74,222,128,0.25)",
+          }}
+        >
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div
+                className="text-[0.62rem] font-semibold uppercase tracking-[0.28em]"
+                style={{ color: "#4ADE80" }}
+              >
+                Near-trigger scan
+              </div>
+              <div
+                className="mt-1 text-sm font-semibold tracking-tight"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Levels within ±{NEAR_PCT}% of current price
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                Yahoo quotes (~15-min delayed) · scanned {scannedCount} of{" "}
+                {allTickers.size} ticker{allTickers.size === 1 ? "" : "s"}
+              </p>
+            </div>
+            <Link href="/levels" className="text-[0.68rem] uppercase tracking-wider text-muted hover:text-text">
+              Dismiss
+            </Link>
+          </div>
+
+          {scanError ? (
+            <div className="mt-3 text-sm text-loss">Scan failed: {scanError}</div>
+          ) : near.length === 0 ? (
+            <div className="mt-3 text-sm text-muted">
+              Nothing within ±{NEAR_PCT}% right now. Try again later.
+            </div>
+          ) : (
+            <table className="mt-3 w-full text-sm">
+              <thead className="text-left text-[0.62rem] uppercase tracking-wider text-muted">
+                <tr>
+                  <th className="py-2">Ticker</th>
+                  <th className="py-2 text-right">Spot</th>
+                  <th className="py-2 text-right">Level</th>
+                  <th className="py-2 text-right">Distance</th>
+                  <th className="py-2 text-right">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {near.map((n, i) => {
+                  const absPct = Math.abs(n.distancePct).toFixed(2);
+                  const direction = n.distancePct >= 0 ? "below" : "above";
+                  return (
+                    <tr key={`${n.ticker}-${n.level}-${i}`}>
+                      <td className="py-2 font-mono font-semibold">${n.ticker}</td>
+                      <td className="py-2 text-right font-mono tabular-nums">${n.price.toFixed(2)}</td>
+                      <td className="py-2 text-right font-mono tabular-nums">${n.level.toFixed(2)}</td>
+                      <td
+                        className="py-2 text-right font-mono tabular-nums"
+                        style={{ color: "#4ADE80" }}
+                      >
+                        {absPct}% {direction}
+                      </td>
+                      <td className="py-2 text-right text-[0.68rem] text-muted uppercase tracking-wider">
+                        {n.source}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
 
       {/* Quick add — significant levels observed from trading / backtesting */}
       <section className="card p-5">

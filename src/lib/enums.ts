@@ -95,6 +95,17 @@ export const KEY_LEVEL_LABELS = [
   { value: "resistance", label: "Resistance" },
 ] as const;
 
+// Broader indices behavior tag — used on macro events to capture how
+// SPX / QQQ were acting around the print, independent of a single trade.
+export const INDICES_BEHAVIOR = [
+  { value: "ripping", label: "Ripping (strong rally)" },
+  { value: "grinding_up", label: "Grinding higher" },
+  { value: "sideways", label: "Sideways / chop" },
+  { value: "choppy", label: "Choppy / volatile" },
+  { value: "grinding_down", label: "Grinding lower" },
+  { value: "dumping", label: "Dumping (sharp sell-off)" },
+] as const;
+
 export const MARKET_REGIMES = [
   { value: "cooperating", label: "Cooperating — SPX/QQQ going my way" },
   { value: "sideways", label: "Sideways — chop, no directional bias" },

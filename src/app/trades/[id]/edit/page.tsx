@@ -6,6 +6,8 @@ import { updateTrade } from "./actions";
 import TrimEditor from "../../../TrimEditor";
 import ReopenButton from "../../../ReopenButton";
 import TargetEditor from "../../../TargetEditor";
+import ScreenshotSection from "../../../ScreenshotSection";
+import { desc } from "drizzle-orm";
 
 export default async function EditTradePage({
   params,
@@ -23,6 +25,10 @@ export default async function EditTradePage({
 
   const existingTrims = await db.query.trade_trims.findMany({
     where: eq(schema.trade_trims.trade_id, tradeId),
+  });
+  const existingShots = await db.query.trade_screenshots.findMany({
+    where: eq(schema.trade_screenshots.trade_id, tradeId),
+    orderBy: desc(schema.trade_screenshots.created_at),
   });
 
   const action = updateTrade.bind(null, tradeId);
@@ -294,6 +300,8 @@ export default async function EditTradePage({
           <button type="submit" className="btn btn-primary">Save changes</button>
         </div>
       </form>
+
+      <ScreenshotSection tradeId={tradeId} shots={existingShots} />
 
       {isClosed && (
         <div className="flex items-center justify-between rounded-2xl border border-border/60 p-4">
